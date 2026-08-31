@@ -1,0 +1,132 @@
+#!/bin/bash
+
+set -euo pipefail
+
+BUILD_ROOT=$(realpath "${BASH_SOURCE[0]%/*}/..")
+baseline=""
+output=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --baseline) baseline=$(realpath "$2"); shift 2 ;;
+    --output) output=$2; shift 2 ;;
+    *) echo "Usage: $0 --baseline <json> --output <json>" >&2; exit 1 ;;
+  esac
+done
+
+[[ -f $baseline && -n $output ]] || {
+  echo "ERROR: baseline and output version-set paths are required" >&2
+  exit 1
+}
+
+expected_baseline_sha256=5dc75803a790defe5ca74da2ecda053e5d25df6df4e841b9e6c6d8b126df5b9b
+actual_baseline_sha256=$(sha256sum "$baseline" | awk '{print $1}')
+[[ $actual_baseline_sha256 == "$expected_baseline_sha256" ]] || {
+  echo "ERROR: immutable baseline version set changed" >&2
+  exit 1
+}
+jq -e '.architecture == "aarch64" and .channel == "stable" and (.packages | length) == 120' "$baseline" >/dev/null
+
+readarray -t runtime < <(
+  OMARCHY_SRC='' bash -c '
+    source "$1" >/dev/null 2>&1
+    printf "%s\n" "$epoch" "$pkgver" "$pkgrel" "$_tag" "$_commit"
+  ' _ "$BUILD_ROOT/pkgbuilds/omarchy/PKGBUILD"
+)
+readarray -t settings < <(
+  OMARCHY_SRC='' bash -c '
+    source "$1" >/dev/null 2>&1
+    printf "%s\n" "$epoch" "$pkgver" "$pkgrel" "$_tag" "$_commit"
+  ' _ "$BUILD_ROOT/pkgbuilds/omarchy-settings/PKGBUILD"
+)
+[[ ${runtime[*]} == "${settings[*]}" ]] || {
+  echo "ERROR: runtime and settings pins differ" >&2
+  exit 1
+}
+
+readarray -t keyring < <(
+  bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "$pkgver" "$pkgrel"' \
+    _ "$BUILD_ROOT/pkgbuilds/omarchy-aarch64-keyring/PKGBUILD"
+)
+readarray -t guest_tools < <(
+  bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "$pkgver" "$pkgrel"' \
+    _ "$BUILD_ROOT/pkgbuilds/omarchy-spice-guest-tools/PKGBUILD"
+)
+
+runtime_version="${runtime[0]}:${runtime[1]}-${runtime[2]}"
+keyring_version="${keyring[0]}-${keyring[1]}"
+guest_tools_version="${guest_tools[0]}-${guest_tools[1]}"
+signing_fingerprint=$(<"$BUILD_ROOT/config/aarch64-signing-fingerprint")
+
+for package_name in omarchy omarchy-settings omarchy-aarch64-keyring omarchy-spice-guest-tools; do
+  [[ $(jq --arg name "$package_name" '[.packages[] | select(.name == $name)] | length' "$baseline") -eq 1 ]] || {
+    echo "ERROR: baseline does not contain exactly one $package_name entry" >&2
+    exit 1
+  }
+done
+
+jq -S \
+  --arg baseline_sha256 "$actual_baseline_sha256" \
+  --arg runtime_version "$runtime_version" \
+  --arg runtime_tag "${runtime[3]}" \
+  --arg runtime_commit "${runtime[4]}" \
+  --arg keyring_version "$keyring_version" \
+  --arg guest_tools_version "$guest_tools_version" \
+  --arg signing_fingerprint "$signing_fingerprint" '
+  . as $baseline |
+  {
+    schema: 1,
+    architecture: "aarch64",
+    channel: "stable",
+    release: {
+      repository: "T-Py-T/omarchy-pkgs",
+      tag: "v4.0.1-aarch64-repo.1",
+      immutable: true
+    },
+    baseline: {
+      repository: "riverscn/omarchy-pkgs-aarch64",
+      release_id: 378203967,
+      tag: "repo-4.0.1-1.14.1",
+      sha256sums_sha256: "17577cfd820bf254d72a3a25d6156f0fdb918fd507cc230d8fff027c5f7dcff2",
+      version_set_sha256: $baseline_sha256,
+      legacy_input_sha256: ($baseline.input_sha256 // null)
+    },
+    official_database: $baseline.official_database,
+    runtime: {
+      repository: "T-Py-T/omarchy",
+      tag: $runtime_tag,
+      commit: $runtime_commit,
+      source_archive_sha256: "ff6a8332207ca63d8991bae8757263d6f9dcd647581de270edad1358d7f04924"
+    },
+    signing_fingerprint: $signing_fingerprint,
+    packages: (
+      $baseline.packages |
+      map(
+        if .name == "omarchy" or .name == "omarchy-settings" then
+          .version = $runtime_version |
+          .policy = "adapted" |
+          .source_repository = "T-Py-T/omarchy" |
+          .source_tag = $runtime_tag |
+          .source_commit = $runtime_commit
+        elif .name == "omarchy-aarch64-keyring" then
+          .version = $keyring_version |
+          .policy = "local"
+        elif .name == "omarchy-spice-guest-tools" then
+          .version = $guest_tools_version |
+          .policy = "local"
+        else . end
+      )
+    )
+  } |
+  .package_count = (.packages | length)
+' "$baseline" > "$output"
+
+jq -e '
+  .schema == 1 and
+  .architecture == "aarch64" and
+  .channel == "stable" and
+  .release.immutable == true and
+  .package_count == 120
+' "$output" >/dev/null
+
+echo "Derived T-Py-T AArch64 version set at $output"

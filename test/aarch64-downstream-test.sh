@@ -48,7 +48,7 @@ for package_name in "${packages[@]}"; do
     fail "$package_name does not declare any or aarch64 support"
 done
 
-for variable_name in _tag _commit pkgver pkgrel sha256sums; do
+for variable_name in _tag _commit epoch pkgver pkgrel sha256sums; do
   omarchy_value=$(bash -c 'source "$1" >/dev/null 2>&1; declare -p "$2"' _ \
     "$ROOT/pkgbuilds/omarchy/PKGBUILD" "$variable_name")
   settings_value=$(bash -c 'source "$1" >/dev/null 2>&1; declare -p "$2"' _ \
@@ -80,12 +80,16 @@ base_version=${BASH_REMATCH[1]}
 [[ $pkgrel =~ ^[1-9][0-9]*$ ]] || fail "invalid Omarchy pkgrel: $pkgrel"
 [[ $checksum =~ ^[0-9a-f]{64}$ ]] || fail "invalid Omarchy source checksum"
 
-grep -Fq "#commit=\${_commit}" "$ROOT/pkgbuilds/omarchy/PKGBUILD" ||
-  fail "Omarchy source is not tied to its commit pin"
-grep -Fq "\"omarchy-settings=\${pkgver}\"" "$ROOT/pkgbuilds/omarchy/PKGBUILD" ||
+grep -Fq 'releases/download/${_tag}/omarchy-${_tag#v}.tar.gz' "$ROOT/pkgbuilds/omarchy/PKGBUILD" ||
+  fail "Omarchy source is not tied to its immutable release asset"
+grep -Fq "\"omarchy-settings=\${epoch}:\${pkgver}\"" "$ROOT/pkgbuilds/omarchy/PKGBUILD" ||
   fail "Omarchy does not require its matching settings package"
 grep -Fq "'omarchy-aarch64-keyring'" "$ROOT/pkgbuilds/omarchy/PKGBUILD" ||
   fail "Omarchy does not install the downstream repository keyring"
+grep -Fq "'omarchy-spice-guest-tools>=0.1.4-2'" "$ROOT/pkgbuilds/omarchy/PKGBUILD" ||
+  fail "Omarchy does not install the verified UTM guest integration package"
+grep -Fq "'qemu-guest-agent'" "$ROOT/pkgbuilds/omarchy-spice-guest-tools/PKGBUILD" ||
+  fail "UTM guest integration does not install qemu-guest-agent"
 
 key_file="$ROOT/pkgbuilds/omarchy-aarch64-keyring/omarchy-aarch64.gpg"
 expected_fingerprint=$(<"$ROOT/config/aarch64-signing-fingerprint")
@@ -115,6 +119,11 @@ grep -Fq 'repo-add omarchy-build.db.tar.zst "${built_filenames[@]}"' \
 grep -Fq -- "--pattern '*.pkg.tar.zst.sig'" \
   "$ROOT/bin/download-aarch64-baseline" ||
   fail "incremental build baseline does not download package signatures"
+if ! grep -Fq 'repo-4.0.1-1.14.1' "$ROOT/bin/download-aarch64-baseline" ||
+  ! grep -Fq '17577cfd820bf254d72a3a25d6156f0fdb918fd507cc230d8fff027c5f7dcff2' \
+    "$ROOT/bin/download-aarch64-baseline"; then
+  fail "incremental build baseline is not pinned to the immutable v4.0.1 release"
+fi
 grep -Fq -- "--pattern 'omarchy.db'" \
   "$ROOT/bin/download-aarch64-baseline" &&
   grep -Fq -- "--pattern 'omarchy.db.sig'" \
@@ -183,6 +192,10 @@ grep -Fq 'System.getenv("LIMINE_FORCE_UEFI")' "$limine_patch" ||
 
 grep -q 'TARGETARCH.*amd64' "$ROOT/build/Dockerfile" ||
   fail "build container does not isolate the x86_64-only production repo"
+grep -Fq 'docker.io/alpine@sha256:1832327faf048390adc33852575d37c7ba155e064a339e78b9bd81983a8c7a00' "$ROOT/build/Dockerfile" ||
+  fail "AArch64 build container does not pin its bootstrap image manifest"
+grep -Fq 'ARCHLINUXARM_PKGBUILDS_COMMIT=44cecca528c5c9930088e5b5c5fe276b0f2216a3' "$ROOT/build/Dockerfile" ||
+  fail "Arch Linux ARM bootstrap metadata is not commit-pinned"
 grep -q 'OMARCHY_SRC=/omarchy-src' "$ROOT/bin/build" ||
   fail "local Omarchy source override is not mounted into the builder"
 grep -q "PKGEXT='.pkg.tar.zst'" "$ROOT/build/Dockerfile" ||
@@ -197,6 +210,7 @@ grep -Fq -- '-e SRCDEST=/srcdest' "$ROOT/bin/build" &&
 
 bash -n \
   "$ROOT/bin/check-official-stable" \
+  "$ROOT/bin/derive-aarch64-version-set" \
   "$ROOT/bin/download-aarch64-baseline" \
   "$ROOT/bin/prepare-github-release" \
   "$ROOT/bin/release-aarch64" \

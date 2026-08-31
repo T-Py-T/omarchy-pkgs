@@ -3,24 +3,26 @@
 set -euo pipefail
 
 BUILD_ROOT=$(realpath "${BASH_SOURCE[0]%/*}/..")
-repository=${GITHUB_REPOSITORY:-riverscn/omarchy-pkgs-aarch64}
+repository=${OMARCHY_BASELINE_REPOSITORY:-riverscn/omarchy-pkgs-aarch64}
+release_tag=${OMARCHY_BASELINE_TAG:-repo-4.0.1-1.14.1}
+expected_sums_sha256=${OMARCHY_BASELINE_SHA256SUMS:-17577cfd820bf254d72a3a25d6156f0fdb918fd507cc230d8fff027c5f7dcff2}
+expected_package_count=${OMARCHY_BASELINE_PACKAGE_COUNT:-120}
 destination="$BUILD_ROOT/pkgs.omarchy.org/stable/aarch64"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repository) repository=$2; shift 2 ;;
+    --tag) release_tag=$2; shift 2 ;;
+    --sha256sums) expected_sums_sha256=$2; shift 2 ;;
     --destination) destination=$(realpath -m "$2"); shift 2 ;;
-    *) echo "Usage: $0 [--repository owner/repo] [--destination path]" >&2; exit 1 ;;
+    *) echo "Usage: $0 [--repository owner/repo] [--tag tag] [--sha256sums digest] [--destination path]" >&2; exit 1 ;;
   esac
 done
 
 command -v gh >/dev/null || { echo "ERROR: gh is required" >&2; exit 1; }
 command -v sha256sum >/dev/null || { echo "ERROR: sha256sum is required" >&2; exit 1; }
 
-if ! release_tag=$(gh release view --repo "$repository" --json tagName --jq .tagName 2>/dev/null); then
-  echo "No published AArch64 snapshot found; starting without a baseline."
-  exit 0
-fi
+gh release view "$release_tag" --repo "$repository" >/dev/null
 
 staging=$(mktemp -d)
 trap 'rm -rf "$staging"' EXIT
@@ -34,15 +36,25 @@ gh release download "$release_tag" \
   --pattern 'omarchy.db.sig' \
   --pattern 'omarchy.db.tar.zst' \
   --pattern 'omarchy.db.tar.zst.sig' \
+  --pattern 'repository-version-set.json' \
   --pattern 'SHA256SUMS'
 
 [[ -f $staging/SHA256SUMS ]] || { echo "ERROR: baseline lacks SHA256SUMS" >&2; exit 1; }
+actual_sums_sha256=$(sha256sum "$staging/SHA256SUMS" | awk '{print $1}')
+[[ $actual_sums_sha256 == "$expected_sums_sha256" ]] || {
+  echo "ERROR: immutable baseline SHA256SUMS digest changed" >&2
+  exit 1
+}
 [[ -f $staging/omarchy.db.tar.zst ]] || { echo "ERROR: baseline lacks repository database" >&2; exit 1; }
 [[ -f $staging/omarchy.db.tar.zst.sig ]] || { echo "ERROR: baseline lacks repository database signature" >&2; exit 1; }
 [[ -f $staging/omarchy.db ]] || { echo "ERROR: baseline lacks pacman database alias" >&2; exit 1; }
 [[ -f $staging/omarchy.db.sig ]] || { echo "ERROR: baseline lacks pacman database alias signature" >&2; exit 1; }
 packages=("$staging"/*.pkg.tar.zst)
 [[ -f ${packages[0]} ]] || { echo "ERROR: baseline contains no packages" >&2; exit 1; }
+(( ${#packages[@]} == expected_package_count )) || {
+  echo "ERROR: baseline package count ${#packages[@]} != $expected_package_count" >&2
+  exit 1
+}
 for package in "${packages[@]}"; do
   [[ -f $package.sig ]] || {
     echo "ERROR: baseline package lacks signature: ${package##*/}" >&2
@@ -60,5 +72,6 @@ cp -- \
   "$staging/omarchy.db.sig" \
   "$staging/omarchy.db.tar.zst" \
   "$staging/omarchy.db.tar.zst.sig" \
+  "$staging/repository-version-set.json" \
   "$destination/"
-echo "Seeded ${#packages[@]} packages from Release $release_tag."
+echo "Seeded ${#packages[@]} packages from immutable Release $repository@$release_tag."

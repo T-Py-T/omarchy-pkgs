@@ -1,18 +1,17 @@
 # Omarchy AArch64 Package Repository
 
-This fork publishes the signed stable package channel used by generic AArch64
-virtual-machine images from
-[`riverscn/omarchy-aarch64-image`](https://github.com/riverscn/omarchy-aarch64-image).
-It tracks `omacom-io/omarchy-pkgs` as its upstream build system, but only builds
-the explicitly maintained scope in [`config/aarch64-packages`](config/aarch64-packages).
+This branch publishes the signed, immutable package snapshot used by the
+T-Py-T Omarchy 4.0.1 AArch64 ISO for UTM. It tracks
+`omacom-io/omarchy-pkgs` as its upstream build system, but the release workflow
+is deliberately manual and version-specific.
 
-The channel follows package versions already admitted to
-`https://pkgs.omarchy.org/stable/x86_64`. Event-driven automation synchronizes
-generic recipes, downloads the latest verified Release as its build baseline,
-and compiles only changed packages natively on GitHub's Ubuntu 24.04 ARM runner.
-It then signs the complete package set and repository database, validates a
-fresh pacman transaction, and publishes an immutable GitHub Release snapshot.
-If the official version set has not changed, no new snapshot is produced.
+The workflow verifies the checksum file from immutable Rivers release
+`repo-4.0.1-1.14.1` (release ID `378203967`), seeds its exact 120-package
+snapshot, then rebuilds `omarchy`, `omarchy-settings`,
+`omarchy-aarch64-keyring`, and `omarchy-spice-guest-tools` natively on GitHub's
+Ubuntu 24.04 ARM runner. It replaces every package and database signature with
+the T-Py-T repository key, validates a fresh pacman transaction, and refuses
+to overwrite the final `v4.0.1-aarch64-repo.1` release.
 
 The small downstream delta is explicit:
 
@@ -20,8 +19,10 @@ The small downstream delta is explicit:
 - `config/aarch64-overlay-packages` lists official stable recipes carrying an
   AArch64 patch.
 - all other scoped recipes must exactly match the official stable version.
-- `omarchy` and `omarchy-settings` are built in lockstep from versioned releases
-  in [`riverscn/omarchy-aarch64`](https://github.com/riverscn/omarchy-aarch64).
+- `omarchy` and `omarchy-settings` are built in lockstep from the
+  checksum-pinned `T-Py-T/omarchy` release `v4.0.1-aarch64.3`.
+- `omarchy-spice-guest-tools` pulls in both SPICE and QEMU guest agents for the
+  disposable UTM verification machine.
 
 Architecture-related omissions are kept narrow. Obsidian uses its vendor's
 official Linux ARM64 archive; `dotnet-runtime-bin` follows Microsoft's ARM64
@@ -32,20 +33,21 @@ build dependency; the installed package and VM image contain only the runtime.
 `bindfs` follows AUR directly and carries only the missing AArch64 architecture
 declaration; it supports automatic host-share UID/GID mapping in the VM image.
 
-The latest Release is directly consumable as a pacman repository. Bootstrap its
-public key once, then install the keyring package so future key updates are
-managed by pacman:
+The exact release is directly consumable as a pacman repository. Bootstrap its
+public key once, verify the expected fingerprint, then install the keyring
+package so future key updates are managed by pacman:
 
 ```bash
-curl -fLO https://github.com/riverscn/omarchy-pkgs-aarch64/releases/latest/download/omarchy-aarch64.gpg
+curl -fLO https://github.com/T-Py-T/omarchy-pkgs/releases/download/v4.0.1-aarch64-repo.1/omarchy-aarch64.gpg
 sudo pacman-key --add omarchy-aarch64.gpg
-sudo pacman-key --lsign-key 2A388EDA14046A9218EA5B39D34CA866CE325F2D
+sudo pacman-key --finger 8AA9588904E3054143C07CA0A07D975502D3355F
+sudo pacman-key --lsign-key 8AA9588904E3054143C07CA0A07D975502D3355F
 
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
 [omarchy]
 SigLevel = Required
-Server = https://github.com/riverscn/omarchy-pkgs-aarch64/releases/latest/download
+Server = https://github.com/T-Py-T/omarchy-pkgs/releases/download/v4.0.1-aarch64-repo.1
 EOF
 
 sudo pacman -Syy omarchy-aarch64-keyring
@@ -54,26 +56,21 @@ sudo pacman -Syy omarchy-aarch64-keyring
 Useful maintainer commands:
 
 ```bash
-# Update the Omarchy package pair from a reviewed local source tag. This only
-# edits the two recipes; it never commits or pushes.
-./bin/sync-omarchy-aarch64 v4.0.1-aarch64.1 \
-  --source ../omarchy-aarch64
+# Inspect the exact four-package native rebuild plan without starting Docker.
+./bin/repo build --arch aarch64 --mirror stable --dry-run \
+  --force-explicit --rebuild-explicit \
+  --package omarchy-aarch64-keyring omarchy-spice-guest-tools omarchy-settings omarchy
 
-# Confirm every recipe follows the currently published official stable set.
-./bin/check-official-stable
-
-# Synchronize recipes without committing or pushing.
-./bin/sync-official-stable
-
-# Inspect the complete stable AArch64 build plan without starting Docker.
-OMARCHY_SRC=../omarchy-aarch64 ./bin/release-aarch64 --dry-run
+# Recreate the T-Py-T provenance document from the verified baseline metadata.
+./bin/derive-aarch64-version-set \
+  --baseline pkgs.omarchy.org/stable/aarch64/repository-version-set.json \
+  --output repository-version-set.json
 ```
 
-`origin` should point to this fork and `upstream` to
-`https://github.com/omacom-io/omarchy-pkgs.git`. Keep downstream commits small
-and rebase them onto reviewed upstream `master` updates. The remainder of this
-document describes the inherited upstream build system; the GitHub Release
-workflow above is authoritative for the downstream AArch64 channel.
+`origin` points to `T-Py-T/omarchy-pkgs`; `upstream` is fetch-only and points to
+`omacom-io/omarchy-pkgs`. The remainder of this document describes the inherited
+upstream build system; `.github/workflows/release-aarch64.yml` is authoritative
+for this one-off AArch64 snapshot.
 
 ## Upstream build system
 
