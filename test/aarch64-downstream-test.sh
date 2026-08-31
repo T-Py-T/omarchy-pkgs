@@ -223,6 +223,9 @@ grep -Fq -- '--rebuild-explicit requires --package' "$ROOT/bin/build" ||
 grep -Fq -- '-e SRCDEST=/srcdest' "$ROOT/bin/build" &&
   grep -Fq -- '-v "$SRCDEST_DIR:/srcdest"' "$ROOT/bin/build" ||
   fail "makepkg source downloads are not persisted across container builds"
+grep -Fq '/bin/bash /build/validate-repository.sh' \
+  "$ROOT/bin/prepare-github-release" ||
+  fail "repository validation is not launched through the image shell"
 
 bash -n \
   "$ROOT/bin/check-official-stable" \
