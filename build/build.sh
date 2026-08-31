@@ -64,7 +64,8 @@ EOF
   if [[ -f "$FINAL_OUTPUT_DIR/omarchy.db.tar.zst" ]] || [[ -f "$FINAL_OUTPUT_DIR/omarchy.db" ]]; then
     repository_siglevel='Optional TrustAll'
     if [[ "$ARCH" == aarch64 ]]; then
-      repository_key="$PKGBUILDS_DIR/omarchy-aarch64-keyring/omarchy-aarch64.gpg"
+      repository_key=${OMARCHY_BASELINE_KEY:-/build/keys/riverscn-aarch64-baseline.gpg}
+      expected_repository_fingerprint=${OMARCHY_BASELINE_FINGERPRINT:-2A388EDA14046A9218EA5B39D34CA866CE325F2D}
       [[ -f "$repository_key" ]] || {
         echo "ERROR: AArch64 repository bootstrap key is missing: $repository_key" >&2
         exit 1
@@ -73,6 +74,10 @@ EOF
         awk -F: '$1 == "fpr" {print $10; exit}')
       [[ "$repository_fingerprint" =~ ^[0-9A-F]{40}$ ]] || {
         echo "ERROR: AArch64 repository bootstrap key is invalid" >&2
+        exit 1
+      }
+      [[ "$repository_fingerprint" == "$expected_repository_fingerprint" ]] || {
+        echo "ERROR: unexpected AArch64 baseline signing fingerprint" >&2
         exit 1
       }
       sudo pacman-key --add "$repository_key"
