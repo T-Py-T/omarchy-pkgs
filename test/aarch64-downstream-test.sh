@@ -226,6 +226,11 @@ grep -Fq -- '-e SRCDEST=/srcdest' "$ROOT/bin/build" &&
 grep -Fq '/bin/bash /build/validate-repository.sh' \
   "$ROOT/bin/prepare-github-release" ||
   fail "repository validation is not launched through the image shell"
+grep -Fq 'ERROR: invalid package signature:' \
+  "$ROOT/bin/prepare-github-release" &&
+  grep -Fq 'ERROR: invalid repository database signature:' \
+    "$ROOT/bin/prepare-github-release" ||
+  fail "release preparation does not identify invalid signed assets"
 
 bash -n \
   "$ROOT/bin/check-official-stable" \
