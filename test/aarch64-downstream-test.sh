@@ -6,6 +6,14 @@ ROOT=$(realpath "${BASH_SOURCE[0]%/*}/..")
 SCOPE="$ROOT/config/aarch64-packages"
 LOCAL_PACKAGES="$ROOT/config/aarch64-local-packages"
 OVERLAY_PACKAGES="$ROOT/config/aarch64-overlay-packages"
+test_tmp=$(mktemp -d)
+key_home=""
+
+cleanup() {
+  rm -rf -- "$test_tmp"
+  [[ -z $key_home ]] || rm -rf -- "$key_home"
+}
+trap cleanup EXIT
 
 fail() {
   echo "FAIL: $*" >&2
@@ -42,7 +50,10 @@ for package_name in "${packages[@]}"; do
   jq -e . "$package_dir/.omarchy/package.json" >/dev/null ||
     fail "invalid metadata for $package_name"
 
-  srcinfo=$(cd "$package_dir" && makepkg --printsrcinfo) ||
+  package_tmp="$test_tmp/$package_name"
+  mkdir -p "$package_tmp"
+  cp -a "$package_dir/." "$package_tmp/"
+  srcinfo=$(cd "$package_tmp" && makepkg --printsrcinfo) ||
     fail "cannot generate .SRCINFO for $package_name"
   grep -Eq '^[[:space:]]+arch = (any|aarch64)$' <<<"$srcinfo" ||
     fail "$package_name does not declare any or aarch64 support"
@@ -96,7 +107,6 @@ expected_fingerprint=$(<"$ROOT/config/aarch64-signing-fingerprint")
 [[ $expected_fingerprint =~ ^[0-9A-F]{40}$ ]] ||
   fail "invalid configured repository signing fingerprint"
 key_home=$(mktemp -d)
-trap 'rm -rf "$key_home"' EXIT
 chmod 700 "$key_home"
 actual_fingerprint=$(GNUPGHOME=$key_home \
   gpg --batch --show-keys --with-colons "$key_file" 2>/dev/null |
