@@ -236,11 +236,17 @@ grep -Fq -- '--refresh-identical-signatures' \
   grep -Fq '[[ $REFRESH_IDENTICAL_SIGNATURES == false ]]' \
     "$ROOT/bin/promote-build" ||
   fail "downstream release does not replace foreign signatures safely"
+grep -Fq 'normalize-github-release-package-names' \
+  "$ROOT/.github/workflows/release-aarch64.yml" &&
+  grep -Fq 'normalized=${filename//:/.}' \
+    "$ROOT/bin/normalize-github-release-package-names" ||
+  fail "GitHub release package filenames are not normalized before indexing"
 
 bash -n \
   "$ROOT/bin/check-official-stable" \
   "$ROOT/bin/derive-aarch64-version-set" \
   "$ROOT/bin/download-aarch64-baseline" \
+  "$ROOT/bin/normalize-github-release-package-names" \
   "$ROOT/bin/prepare-github-release" \
   "$ROOT/bin/promote-build" \
   "$ROOT/bin/release-aarch64" \

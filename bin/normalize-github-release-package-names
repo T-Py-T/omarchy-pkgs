@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <package-directory>" >&2
+  exit 1
+fi
+
+package_dir=$1
+[[ -d $package_dir ]] || {
+  echo "ERROR: package directory does not exist: $package_dir" >&2
+  exit 1
+}
+
+shopt -s nullglob
+packages=("$package_dir"/*:*.pkg.tar.*)
+for source in "${packages[@]}"; do
+  filename=${source##*/}
+  normalized=${filename//:/.}
+  destination="$package_dir/$normalized"
+  [[ ! -e $destination ]] || {
+    echo "ERROR: normalized package filename already exists: $normalized" >&2
+    exit 1
+  }
+  mv -- "$source" "$destination"
+  echo "Normalized GitHub release package filename: $filename -> $normalized"
+done

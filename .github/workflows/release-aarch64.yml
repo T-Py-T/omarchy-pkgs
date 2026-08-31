@@ -53,6 +53,8 @@ jobs:
             destination="build-output/stable/aarch64/${package##*/}"
             [[ -e $destination ]] || cp -- "$package" "$destination"
           done
+          ./bin/normalize-github-release-package-names \
+            build-output/stable/aarch64
           ./bin/derive-aarch64-version-set \
             --baseline pkgs.omarchy.org/stable/aarch64/repository-version-set.json \
             --output repository-version-set.json
