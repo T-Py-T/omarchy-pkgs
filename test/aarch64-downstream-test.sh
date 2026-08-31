@@ -212,6 +212,9 @@ grep -q "PKGEXT='.pkg.tar.zst'" "$ROOT/build/Dockerfile" ||
   fail "AArch64 build output is not normalized to zstd package archives"
 grep -q -- '--force-explicit' "$ROOT/.github/workflows/release-aarch64.yml" ||
   fail "stable snapshot build does not explicitly bypass upstream release rings"
+grep -Fq '[[ -e $destination ]] || cp -- "$package" "$destination"' \
+  "$ROOT/.github/workflows/release-aarch64.yml" ||
+  fail "baseline assembly does not preserve rebuilt packages portably"
 grep -Fq -- '--rebuild-explicit requires --package' "$ROOT/bin/build" ||
   fail "an unpublished same-version AArch64 package cannot be rebuilt explicitly"
 grep -Fq -- '-e SRCDEST=/srcdest' "$ROOT/bin/build" &&

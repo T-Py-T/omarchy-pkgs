@@ -49,7 +49,10 @@ jobs:
           shopt -s nullglob
           mkdir -p build-output/stable/aarch64
           baseline=(pkgs.omarchy.org/stable/aarch64/*.pkg.tar.zst)
-          cp --no-clobber -- "${baseline[@]}" build-output/stable/aarch64/
+          for package in "${baseline[@]}"; do
+            destination="build-output/stable/aarch64/${package##*/}"
+            [[ -e $destination ]] || cp -- "$package" "$destination"
+          done
           ./bin/derive-aarch64-version-set \
             --baseline pkgs.omarchy.org/stable/aarch64/repository-version-set.json \
             --output repository-version-set.json
