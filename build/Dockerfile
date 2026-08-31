@@ -6,11 +6,15 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Bootstrap - Create base Arch/ALARM system from scratch
 # ------------------------------------------------------------------------------
-FROM docker.io/alpine:3.21 AS bootstrapper
+# Native AArch64 manifest for Alpine 3.21.7. The release workflow runs on an
+# AArch64 host, so pin the architecture-specific manifest instead of following
+# the moving 3.21 tag.
+FROM docker.io/alpine@sha256:1832327faf048390adc33852575d37c7ba155e064a339e78b9bd81983a8c7a00 AS bootstrapper
 
 ARG TARGETARCH
 ARG BUILDPLATFORM
 ARG MIRROR=edge
+ARG ARCHLINUXARM_PKGBUILDS_COMMIT=44cecca528c5c9930088e5b5c5fe276b0f2216a3
 
 COPY pacstrap-docker /usr/local/bin/
 
@@ -43,18 +47,23 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
             printf 'Server = https://mirror.omarchy.org/$repo/os/$arch\n' > /etc/pacman.d/mirrorlist; \
         fi; \
     else \
-        curl -L "https://raw.githubusercontent.com/archlinuxarm/PKGBUILDs/master/core/pacman-mirrorlist/mirrorlist" 2>/dev/null | \
-            sed -E 's/^\s*#\s*Server\s*=/Server =/g' > /etc/pacman.d/mirrorlist && \
+        curl -fsSL "https://raw.githubusercontent.com/archlinuxarm/PKGBUILDs/${ARCHLINUXARM_PKGBUILDS_COMMIT}/core/pacman-mirrorlist/mirrorlist" -o /tmp/archlinuxarm-mirrorlist && \
+        echo 'e25f0bc284287342b221377d2a0ca0203eaf13f52d369d6676c4730a8e2b1de1  /tmp/archlinuxarm-mirrorlist' | sha256sum -c - && \
+        sed -E 's/^\s*#\s*Server\s*=/Server =/g' /tmp/archlinuxarm-mirrorlist > /etc/pacman.d/mirrorlist && \
         sed -i 's/\$arch/aarch64/g' /etc/pacman.d/mirrorlist; \
     fi
 
 # Bootstrap keyrings (required before pacstrap can verify packages)
 RUN mkdir -p /usr/share/pacman/keyrings && \
     if [ "${TARGETARCH}" = "arm64" ]; then \
-        KEYRING_URL="https://raw.githubusercontent.com/archlinuxarm/PKGBUILDs/master/core/archlinuxarm-keyring/" && \
+        KEYRING_URL="https://raw.githubusercontent.com/archlinuxarm/PKGBUILDs/${ARCHLINUXARM_PKGBUILDS_COMMIT}/core/archlinuxarm-keyring/" && \
         for file in archlinuxarm-revoked archlinuxarm-trusted archlinuxarm.gpg; do \
             curl -fsSL "${KEYRING_URL}${file}" -o /usr/share/pacman/keyrings/${file} || exit 1; \
         done && \
+        printf '%s\n' \
+            'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /usr/share/pacman/keyrings/archlinuxarm-revoked' \
+            'f2a7250f2a2b77542f82f4219b2bae7895f27b3dcfdf350b497e2be306af776d  /usr/share/pacman/keyrings/archlinuxarm-trusted' \
+            '6ce771e853f04a38a5b533cb33e61f877b9b06b58b6db051eb8a15d737a2332f  /usr/share/pacman/keyrings/archlinuxarm.gpg' | sha256sum -c - && \
         BOOTSTRAP_EXTRA="archlinuxarm-keyring"; \
     else \
         mkdir /tmp/archlinux-keyring && \

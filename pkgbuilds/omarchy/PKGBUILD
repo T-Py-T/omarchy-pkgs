@@ -10,13 +10,14 @@
 #    provenance only (empty when cut from a bare commit). omarchy and
 #    omarchy-settings must always carry identical _tag/_commit/pkgver/sha256sums.
 pkgname='omarchy'
-_tag='v4.0.1-aarch64.2'
-_commit='1e06f6fa6bec1e2d7a7eb2611e7208aafb758d76'
-pkgver=4.0.1.r6114.g1e06f6fa6bec
+_tag='v4.0.1-aarch64.3'
+_commit='a8c0ee607b1b2fd913d599a5d8978c18e2d5929d'
+epoch=1
+pkgver=4.0.1.r6112.ga8c0ee607b1b
 pkgrel=1
 pkgdesc='Beautiful, modern, and opinionated Arch Linux by DHH'
 arch=('any')
-url='https://github.com/riverscn/omarchy-aarch64'
+url='https://github.com/T-Py-T/omarchy'
 license=('MIT')
 conflicts=('omarchy-dev')
 # Hard depends: only packages whose removal would brick the desktop. The ISO
@@ -25,12 +26,13 @@ depends=(
   # Omarchy meta
   'omarchy-keyring'
   'omarchy-aarch64-keyring'
+  'omarchy-spice-guest-tools>=0.1.4-2'
   # Exact-version pin: omarchy-settings-dev `provides=omarchy-settings`
   # (unversioned), and an unversioned dependency here would let the dev
   # package satisfy it, leaving a mixed dev/stable install. A versioned
   # dependency can only be satisfied by the real omarchy-settings built
   # from the same _commit, and forces the pair to upgrade together.
-  "omarchy-settings=${pkgver}"
+  "omarchy-settings=${epoch}:${pkgver}"
 
   # Bootloader stack. Lives here rather than on omarchy-settings because
   # omarchy-settings is also installed into the live ISO env (for plymouth
@@ -70,18 +72,15 @@ depends=(
   'ttf-jetbrains-mono-nerd-basic'
 )
 
-makedepends=(
-  'git'
-)
-
-# Source: the pinned release commit; set OMARCHY_SRC=/path/to/checkout to
+# Source: a checksum-pinned asset cut from the release commit; set
+# OMARCHY_SRC=/path/to/checkout to
 # build from a local source tree instead (mirrors omarchy-zsh/omarchy-fish DX).
 if [[ -n "${OMARCHY_SRC:-}" ]]; then
   source=()
   sha256sums=()
 else
-  source=("omarchy::git+https://github.com/riverscn/omarchy-aarch64.git#commit=${_commit}")
-  sha256sums=('97b69e37311f87d434c01741cdfdc357fe7617cf79a8455dbaea56d4866ce675')
+  source=("omarchy-${_tag#v}.tar.gz::https://github.com/T-Py-T/omarchy/releases/download/${_tag}/omarchy-${_tag#v}.tar.gz")
+  sha256sums=('ff6a8332207ca63d8991bae8757263d6f9dcd647581de270edad1358d7f04924')
 fi
 
 prepare() {

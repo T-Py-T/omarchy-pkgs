@@ -1,6 +1,6 @@
 pkgname=omarchy-spice-guest-tools
 pkgver=0.1.4
-pkgrel=1
+pkgrel=2
 pkgdesc='System-packaged, per-user SPICE integration for Omarchy'
 url='https://github.com/riverscn/omarchy-spice-guest-tools'
 arch=('aarch64' 'x86_64')
@@ -17,6 +17,7 @@ depends=(
   'hyprland'
   'jq'
   'libxcvt'
+  'qemu-guest-agent'
   'spice-vdagent'
   'systemd'
   'util-linux'
