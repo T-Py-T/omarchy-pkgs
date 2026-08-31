@@ -20,12 +20,21 @@ done
 }
 
 expected_baseline_sha256=5dc75803a790defe5ca74da2ecda053e5d25df6df4e841b9e6c6d8b126df5b9b
+expected_baseline_version_count=91
 actual_baseline_sha256=$(sha256sum "$baseline" | awk '{print $1}')
 [[ $actual_baseline_sha256 == "$expected_baseline_sha256" ]] || {
   echo "ERROR: immutable baseline version set changed" >&2
   exit 1
 }
-jq -e '.architecture == "aarch64" and .channel == "stable" and (.packages | length) == 120' "$baseline" >/dev/null
+actual_baseline_version_count=$(jq '.packages | length' "$baseline")
+jq -e '.architecture == "aarch64" and .channel == "stable"' "$baseline" >/dev/null || {
+  echo "ERROR: immutable baseline version set has unexpected architecture or channel" >&2
+  exit 1
+}
+(( actual_baseline_version_count == expected_baseline_version_count )) || {
+  echo "ERROR: immutable baseline version count $actual_baseline_version_count != $expected_baseline_version_count" >&2
+  exit 1
+}
 
 readarray -t runtime < <(
   OMARCHY_SRC='' bash -c '
@@ -121,12 +130,12 @@ jq -S \
   .package_count = (.packages | length)
 ' "$baseline" > "$output"
 
-jq -e '
+jq -e --argjson expected_package_count "$expected_baseline_version_count" '
   .schema == 1 and
   .architecture == "aarch64" and
   .channel == "stable" and
   .release.immutable == true and
-  .package_count == 120
+  .package_count == $expected_package_count
 ' "$output" >/dev/null
 
 echo "Derived T-Py-T AArch64 version set at $output"

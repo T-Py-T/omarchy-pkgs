@@ -215,6 +215,9 @@ grep -q -- '--force-explicit' "$ROOT/.github/workflows/release-aarch64.yml" ||
 grep -Fq '[[ -e $destination ]] || cp -- "$package" "$destination"' \
   "$ROOT/.github/workflows/release-aarch64.yml" ||
   fail "baseline assembly does not preserve rebuilt packages portably"
+grep -Fq 'expected_baseline_version_count=91' \
+  "$ROOT/bin/derive-aarch64-version-set" ||
+  fail "version-set derivation confuses selected package names with seed archives"
 grep -Fq -- '--rebuild-explicit requires --package' "$ROOT/bin/build" ||
   fail "an unpublished same-version AArch64 package cannot be rebuilt explicitly"
 grep -Fq -- '-e SRCDEST=/srcdest' "$ROOT/bin/build" &&
