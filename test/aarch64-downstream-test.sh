@@ -229,14 +229,20 @@ grep -Fq '/bin/bash /build/validate-repository.sh' \
 grep -Fq 'ERROR: invalid package signature:' \
   "$ROOT/bin/prepare-github-release" &&
   grep -Fq 'ERROR: invalid repository database signature:' \
-    "$ROOT/bin/prepare-github-release" ||
+  "$ROOT/bin/prepare-github-release" ||
   fail "release preparation does not identify invalid signed assets"
+grep -Fq -- '--refresh-identical-signatures' \
+  "$ROOT/bin/prepare-github-release" &&
+  grep -Fq '[[ $REFRESH_IDENTICAL_SIGNATURES == false ]]' \
+    "$ROOT/bin/promote-build" ||
+  fail "downstream release does not replace foreign signatures safely"
 
 bash -n \
   "$ROOT/bin/check-official-stable" \
   "$ROOT/bin/derive-aarch64-version-set" \
   "$ROOT/bin/download-aarch64-baseline" \
   "$ROOT/bin/prepare-github-release" \
+  "$ROOT/bin/promote-build" \
   "$ROOT/bin/release-aarch64" \
   "$ROOT/bin/sign-database" \
   "$ROOT/bin/sync-official-stable" \

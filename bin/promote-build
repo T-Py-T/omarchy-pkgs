@@ -11,6 +11,7 @@ print_header "Promote Build to Production"
 
 # Parse arguments
 DRY_RUN=false
+REFRESH_IDENTICAL_SIGNATURES=false
 while [[ $# -gt 0 ]]; do
   case $1 in
   --arch)
@@ -27,6 +28,10 @@ while [[ $# -gt 0 ]]; do
     DRY_RUN=true
     shift
     ;;
+  --refresh-identical-signatures)
+    REFRESH_IDENTICAL_SIGNATURES=true
+    shift
+    ;;
   -h | --help)
     echo "Usage: $0 [OPTIONS]"
     echo ""
@@ -34,6 +39,8 @@ while [[ $# -gt 0 ]]; do
     echo "  --arch <arch>      Target architecture (x86_64 or aarch64, default: x86_64)"
     echo "  --mirror <mirror>  Mirror to use (edge or stable, default: edge)"
     echo "  --dry-run          Show what would be copied without copying"
+    echo "  --refresh-identical-signatures"
+    echo "                     Replace signatures only when package bytes match"
     echo "  -h, --help         Show this help message"
     echo ""
     echo "This script promotes packages from build-output/ to pkgs.omarchy.org/"
@@ -135,14 +142,17 @@ else
   done
 
   # Signatures carry a timestamp, so a re-signed package never matches byte for
-  # byte. Judge them by the package they sign and keep the published signature.
+  # byte. Judge them by the package they sign. Normal promotion keeps the
+  # published signature. A downstream release seeded from another signer may
+  # explicitly refresh the signature while preserving identical package bytes.
   for pkg_file in *.pkg.tar.*.sig; do
     [[ ! -f "$pkg_file" ]] && continue
     [[ -f "$REPO_DIR/$pkg_file" ]] || continue
 
-    if [[ -n "${ALREADY_PROMOTED[${pkg_file%.sig}]:-}" ]]; then
+    if [[ -n "${ALREADY_PROMOTED[${pkg_file%.sig}]:-}" ]] &&
+      [[ $REFRESH_IDENTICAL_SIGNATURES == false ]]; then
       ALREADY_PROMOTED["$pkg_file"]=1
-    else
+    elif [[ -z "${ALREADY_PROMOTED[${pkg_file%.sig}]:-}" ]]; then
       CONFLICTS+=("$pkg_file")
     fi
   done

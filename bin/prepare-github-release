@@ -24,7 +24,8 @@ signing_fingerprint=$(<"$BUILD_ROOT/config/aarch64-signing-fingerprint")
 }
 
 "$BUILD_ROOT/bin/sign" --arch aarch64 --mirror stable
-"$BUILD_ROOT/bin/promote-build" --arch aarch64 --mirror stable
+"$BUILD_ROOT/bin/promote-build" --arch aarch64 --mirror stable \
+  --refresh-identical-signatures
 "$BUILD_ROOT/bin/clean-repo" --arch aarch64 --mirror stable --keep 1
 "$BUILD_ROOT/bin/update-repo" --arch aarch64 --mirror stable
 "$BUILD_ROOT/bin/sign-database" --arch aarch64 --mirror stable
